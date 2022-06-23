@@ -1,0 +1,79 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class EnemyMemoryPool : MonoBehaviour
+{
+    //기둥과 적을 생성할 때 활성화
+    [SerializeField]
+    private GameObject enemySpawnPointPrefab; // 적이 등장하기 전 적의 등장 위치를 알려주는 프리팹
+    [SerializeField]
+    private GameObject enemyPrefab; // 생성되는 적 프리팹
+    [SerializeField]
+    private float enemySpawnTime = 1; //적 생성 주기
+    [SerializeField]
+    private float enemySpawnLatency = 1; //타일 생성 후 적이 등장하기까지 대기 시간
+
+    private MemoryPool spawnPointMemoryPool; //적 등장 위치를 알려주는 오브젝트 생성, 활성/비활성 관리
+    private MemoryPool enemyMemoryPool; //적 생성, 활성/비활성 관리
+
+    private int numberOfEnemiesSpawnedAtOnce = 1; //동시에 생성되는 적의 숫자
+    private Vector2Int mapSize = new Vector2Int(100, 100); //맵 크기
+
+    private void Awake()
+    {
+        //기둥과 적을 각각 할당하고
+        spawnPointMemoryPool = new MemoryPool(enemySpawnPointPrefab);
+        enemyMemoryPool = new MemoryPool(enemyPrefab);
+        //코루틴 실행
+        StartCoroutine("SpawnTile");
+    }
+
+    private IEnumerator SpawnTile()
+    {
+        //맵 내부 임의의 위치에 빨간 기둥 생성
+        int currentNumber = 0;
+        int maximunNumber = 50;
+
+        while (true)
+        {
+            //처음에는 하나만 생성. 
+            //동시에 numberOfEnemiesSpawnedAtOnce 숫자만큼 적이 생성되도록 반복문
+            for (int i = 0; i < numberOfEnemiesSpawnedAtOnce; ++i)
+            {
+                //기둥 오브젝트 생성
+                GameObject item = spawnPointMemoryPool.ActivatePoolItem();
+                //기둥오브젝트 위치는 임의로 설정
+                item.transform.position = new Vector3(Random.Range(-mapSize.x * 0.49f, mapSize.x * 0.49f), 1, Random.Range(-mapSize.y * 0.49f, mapSize.y * 0.49f));
+                //시간이 지나면 몬스터생성 코루틴 호출
+                StartCoroutine("SpawnEnemy", item);
+            }
+
+            //시간이 지날수록 늘어남
+            currentNumber++;
+
+            //일정 숫자 넘어가면 확인
+            if (currentNumber >= maximunNumber)
+            {
+                currentNumber = 0;
+                numberOfEnemiesSpawnedAtOnce++;
+            }
+
+            yield return new WaitForSeconds(enemySpawnTime);
+        }
+    }
+
+    private IEnumerator SpawnEnemy(GameObject point)
+    {
+        //대기시간
+        yield return new WaitForSeconds(enemySpawnLatency);
+
+        //적 오브젝트를 생성하고, 적의 위치를 point의 위치로 설정
+        GameObject item = enemyMemoryPool.ActivatePoolItem();
+        item.transform.position = point.transform.position;
+
+        //타일 오브젝트를 비활성화
+        spawnPointMemoryPool.DeactivatePoolItem(point);
+    }
+
+}
