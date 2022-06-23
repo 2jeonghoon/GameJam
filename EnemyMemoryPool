@@ -10,7 +10,7 @@ public class EnemyMemoryPool : MonoBehaviour
     [SerializeField]
     private GameObject enemySpawnPointPrefab; // 적이 등장하기 전 적의 등장 위치를 알려주는 프리팹
     [SerializeField]
-    private GameObject[] enemyPrefab; // 생성되는 적 프리팹
+    private GameObject enemyPrefab; // 생성되는 적 프리팹
     [SerializeField]
     private float enemySpawnTime = 1; //적 생성 주기
     [SerializeField]
@@ -21,16 +21,12 @@ public class EnemyMemoryPool : MonoBehaviour
 
     private int numberOfEnemiesSpawnedAtOnce = 1; //동시에 생성되는 적의 숫자
     private Vector2Int mapSize = new Vector2Int(10, 10); //맵 크기
-    private int stage;
-    public int currentscore;
-    public int prevscore;
 
     private void Awake()
     {
-        stage = 1;
         //기둥과 적을 각각 할당하고
         spawnPointMemoryPool = new MemoryPool(enemySpawnPointPrefab);
-        enemyMemoryPool = new MemoryPool(enemyPrefab[stage]);
+        enemyMemoryPool = new MemoryPool(enemyPrefab);
         //코루틴 실행
         StartCoroutine("SpawnTile");
     }
@@ -71,12 +67,6 @@ public class EnemyMemoryPool : MonoBehaviour
 
     private IEnumerator SpawnEnemy(GameObject point)
     {
-        if(currentscore >= prevscore + 200)
-        {
-            stage++;
-            enemyMemoryPool = new MemoryPool(enemyPrefab[stage]);
-        }
-        enemyMemoryPool = new MemoryPool(enemyPrefab[stage]);
         //대기시간
         yield return new WaitForSeconds(enemySpawnLatency);
 
