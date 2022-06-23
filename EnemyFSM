@@ -284,7 +284,6 @@ public class EnemyFSM : MonoBehaviour
 
         if(isDie == true)
         {
-            enemyMemoryPool.currentscore += 10;
             enemyMemoryPool.DeactivateEnemy(gameObject);
         }
     }
