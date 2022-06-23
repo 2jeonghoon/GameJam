@@ -1,0 +1,125 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.AI;
+
+public class EnemyControl : MonoBehaviour
+{
+
+    //적 캐릭터에게 필요한 컴포넌트들
+    private Transform EnemyTr;
+    private Transform PlayerTr;
+    private NavMeshAgent nvAgent;
+    private GameObject player;
+    private PlayerController playerScript;
+
+    //적 캐릭터에게 필요한 변수들
+    public enum EnemyState { idle, trace, attack, die, PlayerDie };
+    public EnemyState enemyState = EnemyState.idle;
+    public float attackDist = 2.0f;
+    public float BornTime;
+
+    // Use this for initialization
+    void Awake()
+    {
+        player = GameObject.FindWithTag("Player");
+
+        EnemyTr = this.gameObject.GetComponent<Transform>();
+        PlayerTr = player.GetComponent<Transform>();
+        nvAgent = this.gameObject.GetComponent<NavMeshAgent>();
+        playerScript = player.GetComponent<PlayerController>();
+
+    }
+
+    void OnEnable()
+    {
+        enemyState = EnemyState.idle;
+        BornTime = Time.time + 0.5f;
+
+        StartCoroutine(this.CheckEnemyState());
+        StartCoroutine(this.EnemyAction());
+    }
+
+    /// <summary>
+    /// 적 상태 확인 코루틴
+    /// </summary>
+    IEnumerator CheckEnemyState()
+    {
+        while (enemyState != EnemyState.die
+            && enemyState != EnemyState.PlayerDie)
+        {
+            yield return new WaitForSeconds(0.2f);
+
+            float dist = Vector3.Distance(PlayerTr.position, EnemyTr.position);
+
+            if (BornTime <= Time.time && enemyState == EnemyState.idle)
+            {
+                enemyState = EnemyState.trace;
+            }
+
+            if (enemyState != EnemyState.idle)
+            {
+
+                if (playerScript.PlayerHP == 0)
+                {
+                    enemyState = EnemyState.PlayerDie;
+                }
+                else if (dist <= attackDist)
+                {
+                    enemyState = EnemyState.attack;
+                }
+                else
+                {
+                    enemyState = EnemyState.trace;
+                }
+
+            }
+
+            yield return null;
+
+        }
+    }
+
+    IEnumerator EnemyAction()
+    {
+        while (enemyState != EnemyState.PlayerDie)
+        {
+
+            switch (enemyState)
+            {
+
+                case EnemyState.trace:
+                    nvAgent.SetDestination(PlayerTr.position);
+                    break;
+
+                case EnemyState.die:
+                    nvAgent.ResetPath();
+                    this.gameObject.SetActive(false);
+                    break;
+            }
+
+            yield return null;
+
+        }
+
+    }
+
+    void OnCollisionEnter(Collision coll)
+    {
+        if (coll.collider.tag == "Bullet")
+        {
+
+            Destroy(coll.gameObject);
+
+            Debug.Log("Enemy Hit!");
+
+            if (enemyState != EnemyState.idle)
+            {
+                StopAllCoroutines();
+                enemyState = EnemyState.die;
+                StartCoroutine(EnemyAction());
+            }
+
+        }
+    }
+}
