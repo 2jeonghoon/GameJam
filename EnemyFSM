@@ -4,10 +4,10 @@ using UnityEngine;
 using UnityEngine.AI;
 
 //적 행동상태
-public enum EnemyState { None = -1, Idle = 0, Wander, Pursuit,}
+public enum EnemyState { None = -1, Idle = 0, Wander, Pursuit, Attack, }
 
 public class EnemyFSM : MonoBehaviour
-    //적 캐릭터 행동 제어
+//적 캐릭터 행동 제어
 {
     [Header("Pursuit")]
     [SerializeField]
@@ -15,21 +15,39 @@ public class EnemyFSM : MonoBehaviour
     [SerializeField]
     private float pursuitLimitRange = 10; // 추적 범위(이 범위 바깥으로 나가면"Wander"상태로 변경
 
+    [Header("Attack")]
+    [SerializeField]
+    private GameObject projectilePrefab; //발사체 프리팹
+    [SerializeField]
+    private Transform projectileSpawnPoint; //발사체 생성 위치
+    [SerializeField]
+    private float attackRange = 5; //공격 범위(이 범위 안에 들어오면 "Attack"상태로 변경)
+    [SerializeField]
+    private float attackRate = 1; //공격 속도
+
     private EnemyState enemyState = EnemyState.None; // 현재 적 행동
+    private float lastAttackTime = 0;//공격 주기 계산용 변수
 
     private Status status; //이동속도 등의 정보
     private NavMeshAgent navMeshAgent; //이동제어를 위한 NavMeshAgent
     private Transform target; //적의 공격 대상(플레이어)
+    private EnemyMemoryPool enemyMemoryPool; // 적 메모리 풀(적 오브젝트 비활성화에 사용)
+
+    private EnemyAnimatorController animator; // 애니메이션 재생 제어
 
     //private void Awake()
-    public void Setup(Transform target)
+    public void Setup(Transform target, EnemyMemoryPool enemyMemoryPool)
     {
+        animator = GetComponent<EnemyAnimatorController>();
+        animator.MoveSpeed = 0;
         //에너미 메모리 풀에서 정보를 넘겨받음.
         //컴포넌트 정보 가져오기
         status = GetComponent<Status>();
         navMeshAgent = GetComponent<NavMeshAgent>();
         this.target = target;
-
+        this.enemyMemoryPool = enemyMemoryPool;
+        int chp = this.status.MaxHP;
+        status.initHP();
         //네비게이션에서 회전제어하지않도록
         navMeshAgent.updateRotation = false;
     }
@@ -45,7 +63,7 @@ public class EnemyFSM : MonoBehaviour
     {
         //적이 비활성화일 때 현재 재생중인 상태를 종료하고, 상태를 "Nonde"으로 설정
         StopCoroutine(enemyState.ToString());
-        
+
         enemyState = EnemyState.None;
     }
 
@@ -53,7 +71,7 @@ public class EnemyFSM : MonoBehaviour
     {
         //현재 재생중인 상태와 바꾸려고 하는 상태가 같으면 바꿀 필요X return
         if (enemyState == newState) return;
-        
+
         //이전에 재생중이던 상태 종료
         StopCoroutine(enemyState.ToString());
         //현재 적의 상태를 매개변수로 설정
@@ -77,7 +95,7 @@ public class EnemyFSM : MonoBehaviour
         }
     }
 
-   
+
     private IEnumerator AutoChangeFromIdleToWander()
     {
         //1~4초 시간 대기
@@ -107,7 +125,7 @@ public class EnemyFSM : MonoBehaviour
             //목표위치에 근접하게 도달하거나 너무 오랜시간동안 배회하기 상태에 머물러 있으면
             to = new Vector3(navMeshAgent.destination.x, 0, navMeshAgent.destination.z);
             from = new Vector3(transform.position.x, 0, transform.position.z);
-            if((to-from).sqrMagnitude < 0.01f || currentTime >= maxTime)
+            if ((to - from).sqrMagnitude < 0.01f || currentTime >= maxTime)
             {
                 //상태를 "대기"로 변경
                 ChangeState(EnemyState.Idle);
@@ -144,7 +162,7 @@ public class EnemyFSM : MonoBehaviour
         return targetPosition;
     }
 
-    
+
     private Vector3 SetAngle(float radius, int angle)
     {
         Vector3 position = Vector3.zero;
@@ -155,13 +173,13 @@ public class EnemyFSM : MonoBehaviour
         return position;
     }
 
+    // Run
     private IEnumerator Pursuit()
     {
         while (true)
         {
             //이동 속도 설정(배회할 때는 걷는 속도로 이동, 추적할 때는 뛰는 속도로 이동)
             navMeshAgent.speed = status.RunSpeed;
-
             //목표위치를 현재 플레이어의 위치로 설정
             navMeshAgent.SetDestination(target.position);
 
@@ -170,6 +188,34 @@ public class EnemyFSM : MonoBehaviour
 
             //타겟과의 거리에 따라 행동 선택(배회, 추격, 원거리 공격)
             CalculateDistanceToTargetAndSelectState();
+
+            yield return null;
+        }
+    }
+
+    private IEnumerator Attack()
+    {
+        //공격할 때는 이동을 멈추도록 설정
+        navMeshAgent.ResetPath();
+
+        while (true)
+        {
+            //타겟 방향 주시
+            LookRotationToTarget();
+
+            //타겟과의 거리에 따라 행동 선택(배회, 추격, 원거리 공격)
+            CalculateDistanceToTargetAndSelectState();
+
+            //공격주기 체크해서
+            if (Time.time - lastAttackTime > attackRate)
+            {
+                //공격주기가 되어야 공격할 수 있도록 하기 위해 현재 시간 저장
+                lastAttackTime = Time.time;
+
+                //발사체 생성
+                GameObject clone = Instantiate(projectilePrefab, projectileSpawnPoint.position, projectileSpawnPoint.rotation);
+                clone.GetComponent<EnemyProjectile>().Setup(target.position);
+            }
 
             yield return null;
         }
@@ -195,12 +241,20 @@ public class EnemyFSM : MonoBehaviour
 
         float distance = Vector3.Distance(target.position, transform.position);
 
-        if(distance <= targetRecognitionRange)
+        if (distance <= attackRange)
         {
-            ChangeState(EnemyState.Pursuit);
+            animator.MoveSpeed = 0;
+            ChangeState(EnemyState.Attack);
         }
-        else if(distance >= pursuitLimitRange)
+        else if (distance <= targetRecognitionRange)
         {
+            animator.MoveSpeed = 1;
+            ChangeState(EnemyState.Pursuit);
+
+        }
+        else if (distance >= pursuitLimitRange)
+        {
+            animator.MoveSpeed = 0.5f;
             ChangeState(EnemyState.Wander);
         }
     }
@@ -219,6 +273,19 @@ public class EnemyFSM : MonoBehaviour
         Gizmos.color = Color.green;
         Gizmos.DrawWireSphere(transform.position, pursuitLimitRange);
 
+        Gizmos.color = new Color(0.39f, 0.04f, 0.04f);
+        Gizmos.DrawWireSphere(transform.position, attackRange);
+
     }
 
+    public void TakeDamage(int damage)
+    {
+        bool isDie = status.DecreaseHP(damage);
+
+        if(isDie == true)
+        {
+            enemyMemoryPool.currentscore += 10;
+            enemyMemoryPool.DeactivateEnemy(gameObject);
+        }
+    }
 }
