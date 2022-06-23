@@ -29,7 +29,7 @@ public class MemoryPool : MonoBehaviour
         //생성자로 초기화
         maxCount = 0;
         activeCount = 0;
-        this.poolObject = poolObject;
+        this.poolObject = gameObject;
 
         poolItemList = new List<PoolItem>();
 
