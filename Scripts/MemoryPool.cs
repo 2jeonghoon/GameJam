@@ -1,0 +1,154 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class MemoryPool : MonoBehaviour
+{
+    //오브젝트를 지우지않고 비활성화해서 관리하는 메모리풀
+
+    //메모리 풀로 관리되는 오브젝트 정보
+    private class PoolItem
+    {
+        public bool isActive; //"gameObject"의 활성화/비활성화 정보
+        public GameObject gameObject; //화면에 보이는 실제 게임오브젝트
+    }
+
+    private int increaseCount = 5; //오브젝트가 부족할 때 instantiate()로 추가 생성되는 오브젝트 개수
+    private int maxCount; // 현재 리스트에 등록되어 있는 오브젝트 개수
+    private int activeCount; //현재 게임에 사용되고 있는(활성화) 오브젝트 개수
+
+    private GameObject poolObject;// 오브젝트 풀링에서 관리하는 게임오브젝트 프리팹
+    private List<PoolItem> poolItemList; //관리되는 모든 오브젝트를 저장하는 리스트
+
+    public int MaxCount => maxCount; // 외부에서 현재 리스트에 등록되어 있는 오브젝트 개수 확인을 위한 프로퍼티
+    public int ActiveCount => activeCount; //외부에서 현재 활성화 되어 있는 오브젝트 개수 확인을 위한 프로퍼티
+
+
+    public MemoryPool(GameObject gameObject)
+    {
+        //생성자로 초기화
+        maxCount = 0;
+        activeCount = 0;
+        this.poolObject = gameObject;
+
+        poolItemList = new List<PoolItem>();
+
+        //최초 5개의 아이템 생성
+        InstantiateObjects();
+    }
+
+    //increaseCount단위로 오브젝트 생성
+    public void InstantiateObjects()
+    {
+        maxCount += increaseCount;
+
+        for (int i = 0; i < increaseCount; ++i)
+        {
+            PoolItem poolItem = new PoolItem();
+
+            //바로 사용하지 않을 수도 있기 때문에 false로 보이지 않게 함.
+            poolItem.isActive = false;
+            poolItem.gameObject = GameObject.Instantiate(poolObject);
+            poolItem.gameObject.SetActive(false);
+
+            //리스트에 저장
+            poolItemList.Add(poolItem);
+        }
+    }
+
+    //현재 관리중인(활성/비활성) 모든 오브젝트 삭제, 씬이 종료되거나 게임이 종료될 때 한 번만 호출
+    public void DestroyObjects()
+    {
+        if (poolItemList == null) return;
+
+        int count = poolItemList.Count;
+        for (int i = 0; i < count; ++i)
+        {
+            GameObject.Destroy(poolItemList[i].gameObject);
+        }
+
+        poolItemList.Clear();
+    }
+
+
+    //현재 비활성화 상태의 오브젝트 중 하나를 활성화로 만들어 사용
+    public GameObject ActivatePoolItem()
+    {
+        //리스트가 비어있으면 관리중인 오브젝트X
+        if (poolItemList == null) return null;
+
+        //현재 생성해서 관리하는 모든 오브젝트 개수와 현재 활성화 상태인 오브젝트 개수 비교
+        //모든 오브젝트가 활성화 상태이면 새로운 오브젝트 필요
+        if (maxCount == activeCount)
+        {
+            //생성
+            InstantiateObjects();
+        }
+
+        //비활성화 상태인 오브젝트 찾기
+        int count = poolItemList.Count;
+        for (int i = 0; i < count; ++i)
+        {
+            PoolItem poolItem = poolItemList[i];
+
+            if (poolItem.isActive == false)
+            {
+                activeCount++;
+
+                poolItem.isActive = true;
+                poolItem.gameObject.SetActive(true);
+
+                //사용하도록 반환
+                return poolItem.gameObject;
+            }
+        }
+
+        return null;
+    }
+
+
+    //사용이 끝난 오브젝트 비활성화
+    public void DeactivatePoolItem(GameObject removeObject)
+    {
+        if (poolItemList == null || removeObject == null) return;
+
+        //리스트에서 매개변수로 받은 오브젝트와 같은 요소를 찾아 비활성화
+        int count = poolItemList.Count;
+        for (int i = 0; i < count; ++i)
+        {
+            PoolItem poolItem = poolItemList[i];
+            if (poolItem.gameObject == removeObject)
+            {
+                activeCount--;
+
+                poolItem.isActive = false;
+                poolItem.gameObject.SetActive(false);
+
+                return;
+            }
+        }
+
+    }
+
+    //게임에 사용중인 모든 오브젝트를 비활성화 상태로 설정
+    public void DeactivateAllPoolItems()
+    {
+        if (poolItemList == null) return;
+
+        //리스트를 돌면서 활성화 상태인 오브젝트를 모두 비활성화
+        int count = poolItemList.Count;
+        for (int i = 0; i < count; i++)
+        {
+            PoolItem poolitem = poolItemList[i];
+
+            if (poolitem.gameObject != null && poolitem.isActive == true)
+            {
+                poolitem.isActive = false;
+                poolitem.gameObject.SetActive(false);
+            }
+        }
+
+        activeCount = 0;
+    }
+
+}
